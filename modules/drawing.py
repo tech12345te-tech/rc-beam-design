@@ -1,41 +1,32 @@
-import math
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-def generate_beam_diagram(inputs, As_req, As_prime, shear_details):
-    b, h, covering = inputs['b'], inputs['h'], inputs['covering']
-    d, d_prime = inputs['d'], inputs['d_prime']
-
-    db = 1.6
-    area_db = math.pi * (db**2) / 4
-    num_tens = max(2, math.ceil(As_req / area_db))
-    num_comp = max(2, math.ceil(As_prime / area_db)) if As_prime > 0 else 0
-
-    fig, ax = plt.subplots(figsize=(6, 8))
+def generate_beam_diagram(b, h, As_req, As_prime):
+    fig, ax = plt.subplots(figsize=(5, 6))
     
-    # วาดคอนกรีตและเหล็กปลอก
-    ax.add_patch(patches.Rectangle((0, 0), b, h, fill=True, color='#f0f0f0', ec='black', lw=2))
-    ax.add_patch(patches.Rectangle((covering, covering), b-2*covering, h-2*covering, fill=False, ec='red', ls='--', lw=2))
-
-    # วาดเหล็กเมน
-    x_start = covering + 0.9 + (db/2)
-    x_end = b - x_start
+    # วาดตัวคาน
+    rect = patches.Rectangle((0, 0), b, h, linewidth=2, edgecolor='black', facecolor='whitesmoke')
+    ax.add_patch(rect)
+    
+    covering = 3.0
     
     # เหล็กรับแรงดึง (ด้านล่าง)
-    y_tens = h - d
-    spacing_t = (x_end - x_start) / (num_tens - 1) if num_tens > 1 else 0
-    for i in range(num_tens):
-        ax.add_patch(plt.Circle((x_start + i * spacing_t, y_tens), db/2, color='blue'))
-
+    if As_req > 0:
+        ax.plot([covering+1, b-covering-1], [covering, covering], 'bo', markersize=8)
+        ax.text(b/2, covering+2, f"As = {As_req:.2f} sq.cm", ha='center', color='blue')
+        
     # เหล็กรับแรงอัด (ด้านบน)
-    if num_comp > 0:
-        y_comp = h - d_prime
-        spacing_c = (x_end - x_start) / (num_comp - 1) if num_comp > 1 else 0
-        for i in range(num_comp):
-            ax.add_patch(plt.Circle((x_start + i * spacing_c, y_comp), db/2, color='darkblue'))
-
+    if As_prime > 0:
+        ax.plot([covering+1, b-covering-1], [h-covering, h-covering], 'ro', markersize=8)
+        ax.text(b/2, h-covering-3, f"A's = {As_prime:.2f} sq.cm", ha='center', color='red')
+        
+    # เหล็กปลอก
+    stirrup = patches.Rectangle((covering-1, covering-1), b-2*(covering-1), h-2*(covering-1), 
+                                linewidth=1.5, edgecolor='green', facecolor='none', linestyle='--')
+    ax.add_patch(stirrup)
+    
     ax.set_xlim(-5, b + 5)
-    ax.set_ylim(-10, h + 5)
+    ax.set_ylim(-5, h + 5)
     ax.set_aspect('equal')
     ax.axis('off')
     
