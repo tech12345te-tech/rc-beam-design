@@ -21,18 +21,22 @@ with st.sidebar:
     covering = 3.0
 
 # --- ส่วนประมวลผล ---
-# คำนวณค่าต่างๆ ผ่าน Module
-f_details = design_flexure(Mu, b, h, fc_prime, fy, covering)
-s_details = design_shear(Vu, b, h, fc_prime, fy, covering)
+d = h - covering  # คำนวณความลึกประสิทธิผล (d) ก่อน
 
-# ดึงค่ามาใช้อย่างปลอดภัยด้วย .get() เพื่อป้องกัน KeyError
+# คำนวณค่าแรงดัด (สมมติว่ารับค่ากลับมาเป็น Dictionary)
+f_details = design_flexure(Mu, b, h, fc_prime, fy, covering)
+
+# คำนวณค่าแรงเฉือน ให้ตรงกับไฟล์ shear.py ของคุณ
+# ฟังก์ชันคืนค่า 4 ตัวแปร ได้แก่ Av, spacing, msg, details
+Av, s_spacing, s_msg, s_details_dict = design_shear(fc_prime, fy, b, d, Vu)
+
+# ดึงค่ามาใช้อย่างปลอดภัย
 As_req = f_details.get('As_req', 0.0)
 As_prime = f_details.get('As_prime', 0.0)
 f_type = f_details.get('type', 'Singly')
 f_msg = f_details.get('msg', 'ไม่พบข้อมูล')
-s_msg = s_details.get('msg', 'ไม่พบข้อมูล')
 
-# เตรียมข้อมูลสำหรับ Export
+# เตรียมข้อมูลสำหรับ Export (ใช้ s_details_dict แทน s_details)
 inputs_data = {
     'b': b, 'h': h, 'fc_prime': fc_prime, 'fy': fy, 
     'Mu': Mu, 'Vu': Vu
@@ -51,24 +55,23 @@ with tab_calc:
         if f_type == "Doubly":
             st.write(f"- พื้นที่เหล็กรับแรงอัด (A's): **{As_prime:.2f} sq.cm**")
         
+        # แสดงข้อความผลลัพธ์แรงเฉือนที่ได้มาโดยตรง
         st.warning(f"**การรับแรงเฉือน:** {s_msg}")
         
-        # แสดงตารางแนะนำเหล็กเสริม
         st.markdown("---")
         st.write("💡 **ตารางแนะนำหน้าตัดเหล็ก (As):**")
-        df_rebar = suggest_main_rebar(As_req, b)
+        df_rebar = suggest_main_rebar(As_req, b, covering)
         if df_rebar is not None:
             st.dataframe(df_rebar, hide_index=True)
 
     with col2:
         st.subheader("📥 รายงานและเอกสาร")
-        # แสดงข้อความรายงานสรุป
-        report_text = generate_report_text(inputs_data, f_details, s_details)
+        # ส่ง s_details_dict เข้าไปใน report
+        report_text = generate_report_text(inputs_data, f_details, s_details_dict)
         st.text_area("Preview Report", report_text, height=200)
         
-        # ปุ่มดาวน์โหลด PDF
         try:
-            pdf_data = export_as_pdf(inputs_data, f_details, s_details)
+            pdf_data = export_as_pdf(inputs_data, f_details, s_details_dict)
             st.download_button(
                 label="📥 ดาวน์โหลดรายงาน (PDF)",
                 data=pdf_data,
