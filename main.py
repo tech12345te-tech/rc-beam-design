@@ -21,25 +21,25 @@ with st.sidebar:
     covering = 3.0
 
 # --- ส่วนประมวลผล ---
-d = h - covering  # คำนวณความลึกประสิทธิผล (d) ก่อน
+d = h - covering  # คำนวณความลึกประสิทธิผล (d)
+d_prime = covering # สมมติระยะหุ้มเหล็กรับแรงอัดเท่ากับ covering
 
-# คำนวณค่าแรงดัด (สมมติว่ารับค่ากลับมาเป็น Dictionary)
-f_details = design_flexure(Mu, b, h, fc_prime, fy, covering)
+# 1. คำนวณแรงดัด: ส่งค่า 6 ตัวเรียงตามใน flexure.py และรอรับค่ากลับมา 5 ตัว
+f_type, As_req, As_prime, f_msg, f_details_dict = design_flexure(fc_prime, fy, b, d, d_prime, Mu)
 
-# คำนวณค่าแรงเฉือน ให้ตรงกับไฟล์ shear.py ของคุณ
-# ฟังก์ชันคืนค่า 4 ตัวแปร ได้แก่ Av, spacing, msg, details
+# 2. คำนวณแรงเฉือน: ส่งค่า 5 ตัวเรียงตามใน shear.py และรอรับค่ากลับมา 4 ตัว
 Av, s_spacing, s_msg, s_details_dict = design_shear(fc_prime, fy, b, d, Vu)
 
-# ดึงค่ามาใช้อย่างปลอดภัย
-As_req = f_details.get('As_req', 0.0)
-As_prime = f_details.get('As_prime', 0.0)
-f_type = f_details.get('type', 'Singly')
-f_msg = f_details.get('msg', 'ไม่พบข้อมูล')
-
-# เตรียมข้อมูลสำหรับ Export (ใช้ s_details_dict แทน s_details)
+# 3. เตรียมข้อมูลสำหรับทำรายงาน (แพ็กใส่ Dictionary ให้ไฟล์ report.py ใช้งาน)
 inputs_data = {
     'b': b, 'h': h, 'fc_prime': fc_prime, 'fy': fy, 
     'Mu': Mu, 'Vu': Vu
+}
+flex_report_data = {
+    'type': f_type, 'As_req': As_req, 'As_prime': As_prime, 'msg': f_msg
+}
+shear_report_data = {
+    'msg': s_msg
 }
 
 # --- ส่วนแสดงผล (Main UI) ---
@@ -55,9 +55,9 @@ with tab_calc:
         if f_type == "Doubly":
             st.write(f"- พื้นที่เหล็กรับแรงอัด (A's): **{As_prime:.2f} sq.cm**")
         
-        # แสดงข้อความผลลัพธ์แรงเฉือนที่ได้มาโดยตรง
         st.warning(f"**การรับแรงเฉือน:** {s_msg}")
         
+        # ตารางแนะนำหน้าตัดเหล็ก
         st.markdown("---")
         st.write("💡 **ตารางแนะนำหน้าตัดเหล็ก (As):**")
         df_rebar = suggest_main_rebar(As_req, b, covering)
@@ -66,12 +66,12 @@ with tab_calc:
 
     with col2:
         st.subheader("📥 รายงานและเอกสาร")
-        # ส่ง s_details_dict เข้าไปใน report
-        report_text = generate_report_text(inputs_data, f_details, s_details_dict)
+        # แสดงตัวอย่างรายงานโดยใช้ข้อมูลที่แพ็กไว้
+        report_text = generate_report_text(inputs_data, flex_report_data, shear_report_data)
         st.text_area("Preview Report", report_text, height=200)
         
         try:
-            pdf_data = export_as_pdf(inputs_data, f_details, s_details_dict)
+            pdf_data = export_as_pdf(inputs_data, flex_report_data, shear_report_data)
             st.download_button(
                 label="📥 ดาวน์โหลดรายงาน (PDF)",
                 data=pdf_data,
