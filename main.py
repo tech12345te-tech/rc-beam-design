@@ -6,6 +6,7 @@ from modules.flexure import design_flexure
 from modules.shear import design_shear
 from modules.report import generate_report_text
 from modules.drawing import generate_beam_diagram
+from modules.rebar import suggest_main_rebar
 
 st.set_page_config(page_title="โปรแกรมออกแบบคาน RC", layout="wide")
 st.title("🏗️ โปรแกรมออกแบบคานคอนกรีตเสริมเหล็ก (Modular)")
@@ -43,6 +44,19 @@ with tab_calc:
                 st.write(f"- A's (รับอัด): **{As_prime:.2f} sq.cm**")
                 
             st.warning("**การรับแรงเฉือน:** " + s_msg)
+            # --- ตารางแนะนำเหล็กเสริม ---
+            st.markdown("---")
+            st.write("💡 **ตารางแนะนำเหล็กเสริมรับแรงดึง (As):**")
+            df_rebar_tension = suggest_main_rebar(As_req, b, covering)
+            if df_rebar_tension is not None:
+                st.dataframe(df_rebar_tension, hide_index=True)
+            
+            # ตรวจสอบว่าเป็นคานเสริมเหล็กคู่หรือไม่ ถ้าใช่ให้โชว์ตารางเหล็กรับแรงอัดด้วย
+            if f_type == "Doubly" and As_prime > 0:
+                st.write("💡 **ตารางแนะนำเหล็กเสริมรับแรงอัด (A's):**")
+                df_rebar_comp = suggest_main_rebar(As_prime, b, covering)
+                if df_rebar_comp is not None:
+                    st.dataframe(df_rebar_comp, hide_index=True)
             
         with c2:
             # 3. เรียกใช้โมดูลวาดภาพ
