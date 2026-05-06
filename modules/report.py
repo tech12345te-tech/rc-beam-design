@@ -1,34 +1,48 @@
-from datetime import datetime
+from fpdf import FPDF
 
 def generate_report_text(inputs, flex, shear):
-    """สร้างรายการคำนวณแบบ Text"""
-    report = f"=========================================================\n"
-    report += f"                 รายการคำนวณออกแบบคาน ค.ส.ล.                 \n"
-    report += f"=========================================================\n"
-    report += f"วันที่คำนวณ: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    report = "=== รายงานการออกแบบคานคอนกรีตเสริมเหล็ก ===\n"
+    report += f"ขนาดคาน: {inputs.get('b')} x {inputs.get('h')} ซม.\n"
+    report += "-"*40 + "\n"
     
-    report += f"[1. ข้อมูลนำเข้า]\n"
-    report += f"- f'c = {inputs['fc_prime']} ksc | fy = {inputs['fy']} ksc\n"
-    report += f"- b = {inputs['b']} cm | h = {inputs['h']} cm | d = {inputs['d']:.2f} cm\n"
-    report += f"- Mu = {inputs['Mu']} kg-m | Vu = {inputs['Vu']} kg\n\n"
+    report += f">>> การออกแบบรับแรงดัด: {flex.get('msg', 'N/A')}\n"
+    report += f"- พื้นที่เหล็กรับแรงดึงที่ต้องการ (As): {flex.get('As_req', 0):.2f} sq.cm\n"
+    if flex.get('type') == 'Doubly':
+        report += f"- พื้นที่เหล็กรับแรงอัดที่ต้องการ (A's): {flex.get('As_prime', 0):.2f} sq.cm\n"
+    report += "\n"
     
-    report += f"[2. ออกแบบรับแรงดัด]\n"
-    report += f"- As_min = {flex['As_min']:.2f} sq.cm\n"
-    report += f"- Mu_max = {flex['Mu_max']:.2f} kg-m\n"
-    
-    if flex['type'] == 'Singly':
-        report += f"** ออกแบบเป็นเหล็กเสริมเดี่ยว **\n"
-    else:
-        report += f"** ต้องออกแบบเป็นเหล็กเสริมคู่ **\n"
-        
-    report += f">>> ต้องการเหล็กรับแรงดึง (As) = {flex['As_req']:.2f} sq.cm\n"
-    if flex['type'] == 'Doubly':
-        report += f">>> ต้องการเหล็กรับแรงอัด (A's) = {flex['As_prime']:.2f} sq.cm\n\n"
-    
-    report += f"[3. ออกแบบรับแรงเฉือน]\n"
-    if shear.get('s_practise'):
-        report += f">>> ใช้เหล็กปลอก RB9 ระยะเรียง (s) = {shear['s_practise']} ซม.\n"
-    else:
-        report += f">>> หน้าตัดรับแรงเฉือนได้โดยไม่ต้องเสริมเหล็กปลอกตามทฤษฎี\n"
-        
+    report += f">>> การออกแบบรับแรงเฉือน: {shear.get('msg', 'N/A')}\n"
+    report += "-"*40 + "\n"
     return report
+
+def export_as_pdf(inputs, flex, shear):
+    pdf = FPDF()
+    pdf.add_page()
+    
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(0, 10, "RC Beam Design Report", ln=True, align='C')
+    pdf.ln(10)
+    
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 10, "1. Design Inputs", ln=True)
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(0, 7, f"- Beam Size: {inputs.get('b')} x {inputs.get('h')} cm", ln=True)
+    pdf.cell(0, 7, f"- Concrete Strength (fc'): {inputs.get('fc_prime')} ksc", ln=True)
+    pdf.cell(0, 7, f"- Steel Strength (fy): {inputs.get('fy')} ksc", ln=True)
+    pdf.ln(5)
+    
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 10, "2. Flexural Results", ln=True)
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(0, 7, f"- Status: {flex.get('msg')}", ln=True)
+    pdf.cell(0, 7, f"- As Required: {flex.get('As_req', 0):.2f} sq.cm", ln=True)
+    if flex.get('type') == 'Doubly':
+        pdf.cell(0, 7, f"- A's Required: {flex.get('As_prime', 0):.2f} sq.cm", ln=True)
+    pdf.ln(5)
+    
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 10, "3. Shear Results", ln=True)
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(0, 7, f"- Status: {shear.get('msg')}", ln=True)
+    
+    return pdf.output(dest='S')
