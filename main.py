@@ -1,78 +1,84 @@
 import streamlit as st
-from datetime import datetime
-
-# นำเข้าฟังก์ชันจากโฟลเดอร์ modules
 from modules.flexure import design_flexure
 from modules.shear import design_shear
-from modules.report import generate_report_text
 from modules.drawing import generate_beam_diagram
 from modules.rebar import suggest_main_rebar
+from modules.report import generate_report_text, export_as_pdf
 
-st.set_page_config(page_title="โปรแกรมออกแบบคาน RC", layout="wide")
-st.title("🏗️ โปรแกรมออกแบบคานคอนกรีตเสริมเหล็ก (Modular)")
+# ตั้งค่าหน้าเว็บ
+st.set_page_config(page_title="RC Beam Design Pro", layout="wide")
+st.title("🏗️ โปรแกรมออกแบบคานคอนกรีตเสริมเหล็ก")
 
-st.sidebar.header("📝 กำหนดค่า (Input)")
-fc_prime = st.sidebar.number_input("f'c (ksc)", value=240)
-fy = st.sidebar.number_input("fy (ksc)", value=4000)
-fyv = st.sidebar.number_input("fyv (ksc)", value=2400)
-b = st.sidebar.number_input("b (cm)", value=20.0)
-h = st.sidebar.number_input("h (cm)", value=50.0)
-covering = st.sidebar.number_input("Covering (cm)", value=3.0)
-Mu = st.sidebar.number_input("Mu (kg-m)", value=5000.0)
-Vu = st.sidebar.number_input("Vu (kg)", value=3500.0)
+# --- ส่วนรับข้อมูล (Sidebar) ---
+with st.sidebar:
+    st.header("📌 ข้อมูลนำเข้า (Inputs)")
+    b = st.number_input("ความกว้างคาน b (cm)", value=20.0)
+    h = st.number_input("ความลึกคาน h (cm)", value=40.0)
+    fc_prime = st.number_input("กำลังคอนกรีต fc' (ksc)", value=240.0)
+    fy = st.number_input("กำลังเหล็กเสริม fy (ksc)", value=4000.0)
+    Mu = st.number_input("โมเมนต์ดัด Mu (kg-m)", value=5000.0)
+    Vu = st.number_input("แรงเฉือน Vu (kg)", value=3000.0)
+    covering = 3.0
 
-# คำนวณ d เบื้องต้น
-d = h - covering - 0.9 - 0.8
-d_prime = covering + 0.9 + 0.8
-inputs = {'fc_prime': fc_prime, 'fy': fy, 'fyv': fyv, 'b': b, 'h': h, 'd': d, 'd_prime': d_prime, 'Mu': Mu, 'Vu': Vu, 'covering': covering}
+# --- ส่วนประมวลผล ---
+# คำนวณค่าต่างๆ ผ่าน Module
+f_details = design_flexure(Mu, b, h, fc_prime, fy, covering)
+s_details = design_shear(Vu, b, h, fc_prime, fy, covering)
 
-# แบ่งหน้าจอเป็น Tabs 
-tab_calc, tab_report = st.tabs(["🧮 ผลการคำนวณ & หน้าตัด", "📄 รายการคำนวณ (Report)"])
+# ดึงค่ามาใช้อย่างปลอดภัยด้วย .get() เพื่อป้องกัน KeyError
+As_req = f_details.get('As_req', 0.0)
+As_prime = f_details.get('As_prime', 0.0)
+f_type = f_details.get('type', 'Singly')
+f_msg = f_details.get('msg', 'ไม่พบข้อมูล')
+s_msg = s_details.get('msg', 'ไม่พบข้อมูล')
+
+# เตรียมข้อมูลสำหรับ Export
+inputs_data = {
+    'b': b, 'h': h, 'fc_prime': fc_prime, 'fy': fy, 
+    'Mu': Mu, 'Vu': Vu
+}
+
+# --- ส่วนแสดงผล (Main UI) ---
+tab_calc, tab_draw = st.tabs(["📊 ผลการคำนวณ", "✍️ แบบขยายคาน"])
 
 with tab_calc:
-    if st.button("เริ่มออกแบบ", type="primary"):
-        # 1. เรียกใช้โมดูลรับแรงดัด
-        f_type, As_req, As_prime, f_msg, f_details = design_flexure(fc_prime, fy, b, d, d_prime, Mu)
-        # 2. เรียกใช้โมดูลรับแรงเฉือน
-        Av, s_shear, s_msg, s_details = design_shear(fc_prime, fyv, b, d, Vu)
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.subheader("📝 สรุปผลการออกแบบ")
+        st.success(f"**การรับแรงดัด:** {f_msg}")
+        st.write(f"- พื้นที่เหล็กรับแรงดึง (As): **{As_req:.2f} sq.cm**")
+        if f_type == "Doubly":
+            st.write(f"- พื้นที่เหล็กรับแรงอัด (A's): **{As_prime:.2f} sq.cm**")
         
-        c1, c2 = st.columns([1, 1])
-        with c1:
-            st.success("**การรับแรงดัด:** " + f_msg)
-            st.write(f"- As (รับดึง): **{As_req:.2f} sq.cm**")
-            if f_type == "Doubly":
-                st.write(f"- A's (รับอัด): **{As_prime:.2f} sq.cm**")
-                
-            st.warning("**การรับแรงเฉือน:** " + s_msg)
-            # --- ตารางแนะนำเหล็กเสริม ---
-            st.markdown("---")
-            st.write("💡 **ตารางแนะนำเหล็กเสริมรับแรงดึง (As):**")
-            df_rebar_tension = suggest_main_rebar(As_req, b, covering)
-            if df_rebar_tension is not None:
-                st.dataframe(df_rebar_tension, hide_index=True)
-            
-            # ตรวจสอบว่าเป็นคานเสริมเหล็กคู่หรือไม่ ถ้าใช่ให้โชว์ตารางเหล็กรับแรงอัดด้วย
-            if f_type == "Doubly" and As_prime > 0:
-                st.write("💡 **ตารางแนะนำเหล็กเสริมรับแรงอัด (A's):**")
-                df_rebar_comp = suggest_main_rebar(As_prime, b, covering)
-                if df_rebar_comp is not None:
-                    st.dataframe(df_rebar_comp, hide_index=True)
-            
-        with c2:
-            # 3. เรียกใช้โมดูลวาดภาพ
-            fig = generate_beam_diagram(inputs, As_req, As_prime, s_details)
-            st.pyplot(fig)
+        st.warning(f"**การรับแรงเฉือน:** {s_msg}")
+        
+        # แสดงตารางแนะนำเหล็กเสริม
+        st.markdown("---")
+        st.write("💡 **ตารางแนะนำหน้าตัดเหล็ก (As):**")
+        df_rebar = suggest_main_rebar(As_req, b)
+        if df_rebar is not None:
+            st.dataframe(df_rebar, hide_index=True)
 
-        # เอาค่า As_req และ As_prime ยัดเข้าไปใน f_details ก่อนส่งไปทำ Report
-        f_details['As_req'] = As_req
-        f_details['As_prime'] = As_prime
+    with col2:
+        st.subheader("📥 รายงานและเอกสาร")
+        # แสดงข้อความรายงานสรุป
+        report_text = generate_report_text(inputs_data, f_details, s_details)
+        st.text_area("Preview Report", report_text, height=200)
+        
+        # ปุ่มดาวน์โหลด PDF
+        try:
+            pdf_data = export_as_pdf(inputs_data, f_details, s_details)
+            st.download_button(
+                label="📥 ดาวน์โหลดรายงาน (PDF)",
+                data=pdf_data,
+                file_name=f"Beam_Design_{Mu}kgm.pdf",
+                mime="application/pdf"
+            )
+        except Exception as e:
+            st.error(f"ไม่สามารถสร้าง PDF ได้: {e}")
 
-        # เก็บค่าไว้ใช้ใน Tab Report
-        st.session_state['report'] = generate_report_text(inputs, f_details, s_details)
-
-with tab_report:
-    if 'report' in st.session_state:
-        st.code(st.session_state['report'], language='markdown')
-        st.download_button("📥 ดาวน์โหลด .txt", st.session_state['report'], "report.txt")
-    else:
-        st.info("กรุณากด 'เริ่มออกแบบ' ในแท็บแรกก่อนครับ")
+with tab_draw:
+    st.subheader("🖼️ แบบรายละเอียดหน้าตัดคาน")
+    fig = generate_beam_diagram(b, h, As_req, As_prime)
+    st.pyplot(fig)
